@@ -1,0 +1,47 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+  body_size_limit: 15MB
+  sample_limit: 1500
+  target_limit: 30
+  label_limit: 30
+  label_name_length_limit: 200
+  label_value_length_limit: 200
+  query_log_file: query.log  
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'reactory-grafana'
+    static_configs:
+      - targets: ['reactory-grafana:3000']
+
+  - job_name: 'reactory-jaeger'
+    static_configs:
+      - targets: ['reactory-jaeger:16686']
+
+  - job_name: 'reactory-mongodb'
+    static_configs:
+      - targets: ['reactory-mongodb:27017']
+
+  - job_name: 'reactory-postgres'
+    static_configs:
+      - targets: ['reactory-postgres:5432']
+
+  - job_name: 'reactory-redis'
+    static_configs:
+      - targets: ['reactory-redis:6379']
+
+  - job_name: 'reactory-meilisearch'
+    static_configs:
+      - targets: ['reactory-meilisearch:7700']
+
+  - job_name: 'reactory-grafana-loki'
+    static_configs:
+      - targets: ['reactory-grafana-loki:3100']
+
+  - job_name: 'reactory-express-server'
+    static_configs:
+      - targets: ['host.docker.internal:9464']

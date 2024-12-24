@@ -1,3 +1,5 @@
+import middleware from "./middleware";
+import graph from "./graphql";
 const ReactoryTelemetryModule: Reactory.Server.IReactoryModule = {
   name: "ReactoryTelemetry",
   version: "1.0.0",
@@ -8,7 +10,7 @@ const ReactoryTelemetryModule: Reactory.Server.IReactoryModule = {
   dependencies: [],
   description: "A module that provides telemetry services for Reactory",
   forms: [],
-  graphDefinitions: null,
+  graphDefinitions: graph,
   grpc: null,
   id: "reactory.ReactoryTelemetry@1.0.0",
   models: [],
@@ -17,7 +19,8 @@ const ReactoryTelemetryModule: Reactory.Server.IReactoryModule = {
   routes: {},
   services: [],
   translations: [],
-  workflows: []
+  workflows: [],
+  middleware,
 };
 
 export default ReactoryTelemetryModule;
