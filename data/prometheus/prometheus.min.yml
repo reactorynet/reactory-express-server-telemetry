@@ -1,4 +1,3 @@
----
 global:
   scrape_interval: 15s
   evaluation_interval: 30s
@@ -12,15 +11,4 @@ global:
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
-      - targets:
-          - 'localhost:9090'
-
-  - job_name: 'reactory-grafana'
-    static_configs:
-      - targets:
-          - 'localhost:3001'
-
-  - job_name: 'reactory-jaeger'
-    static_configs:
-      - targets:
-          - 'localhost:16686'
+      - targets: ['reactory-prometheus:9090']

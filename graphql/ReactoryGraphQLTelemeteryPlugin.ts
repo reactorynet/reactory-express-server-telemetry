@@ -28,7 +28,6 @@ const ReactoryGraphQLTelemetryPlugin: Reactory.Graph.TReactoryGraphPlugin = {
       willSendResponse: async (_: GraphQLRequestContextWillSendResponse<Reactory.Server.IReactoryContext>) => {
         const duration = (Date.now() - startTime);
         graphqlRequestDuration.record(duration, labels);
-        requestContext.contextValue.info("GraphQL request completed in " + duration + " seconds");
       },
     };
   },

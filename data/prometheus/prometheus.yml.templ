@@ -13,14 +13,14 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets:
-          - 'localhost:9090'
+          - '$PROMETHEUS_URL'
 
   - job_name: 'reactory-grafana'
     static_configs:
       - targets:
-          - 'localhost:3001'
+          - '$GRAFANA_URL'
 
   - job_name: 'reactory-jaeger'
     static_configs:
       - targets:
-          - 'localhost:16686'
+          - '$JAEGER_URL'

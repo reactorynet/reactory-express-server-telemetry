@@ -1,16 +1,17 @@
+---
 apiVersion: 1
 
 datasources:
   - name: Reactory Jaeger
     type: jaeger
-    url: ${REACTORY_GRAFANA_JAEGER_URL:-http://reactory-jaeger:16686}
+    url: $REACTORY_JAEGER_URL
     access: proxy
     isDefault: false
     editable: false
-  
+
   - name: Reactory Postgres
     type: postgres
-    url: reactory-postgres:5432
+    url: $REACTORY_POSTGRES_URL
     user: reactory
     secureJsonData:
       password: reactory
@@ -25,25 +26,24 @@ datasources:
     enabled: true
     isDefault: true
     jsonData:
-      connection: ${MONGOOSE}
-      user: ${MONGO_USER:-reactory}
+      connection: $REACTORY_MONGODB
+      user: $REACTORY_MONGO_USERNAME
     secureJsonData:
-      password: ${MONGO_PASSWORD:-reactory}
+      password: $REACTORY_MONGO_PASSWORD
 
   - name: Reactory Redis
     type: redis
-    url: reactory-redis:6379
+    url: $REACTORY_REDIS_URL
     access: proxy
     isDefault: false
     editable: false
     jsonData:
-      password: ${REACTORY_REDIS_PASSWORD:-reactory}
-  
+      password: $REACTORY_REDIS_PASSWORD
+
   - name: Reactory Prometheus
     type: prometheus
     access: proxy
-    # Access mode - proxy (server in the UI) or direct (browser in the UI).
-    url: http://reactory-prometheus:9090
+    url: $REACTORY_PROMETHEUS_URL
     jsonData:
       httpMethod: POST
       manageAlerts: true

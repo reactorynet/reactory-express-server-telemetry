@@ -2,10 +2,11 @@
   "name": "reactory-telemetry",
   "version": "1.0.0",
   "description": "A telemetry library for reactory platform",
-  "main": "index.ts",
+  "main": "index.js",
+  "type": "commonjs",
   "repository": "https://github.com/reactorynet/reactory-telemetry",
   "author": "W. Weber",
-  "license": "apache2",
+  "license": "MIT",
   "dependencies": {
     "@opentelemetry/sdk-node": "0.57.0",
     "@opentelemetry/api": "1.9.0",
