@@ -1,8 +1,7 @@
 {
   "name": "reactory-telemetry",
   "version": "1.0.0",
-  "description": "A telemetry library for reactory platform",
-  "main": "index.js",
+  "description": "A telemetry library for reactory platform",  
   "type": "commonjs",
   "repository": "https://github.com/reactorynet/reactory-telemetry",
   "author": "W. Weber",
