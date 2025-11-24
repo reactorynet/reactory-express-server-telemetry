@@ -13,14 +13,24 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets:
-          - 'localhost:9090'
+          - 'reactory_prometheus:9090'
+
+  - job_name: 'reactory-server'
+    scrape_interval: 10s
+    static_configs:
+      - targets:
+          - 'host.containers.internal:9464'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'reactory-express-server'
 
   - job_name: 'reactory-grafana'
     static_configs:
       - targets:
-          - 'localhost:3001'
+          - 'reactory_grafana:3000'
 
   - job_name: 'reactory-jaeger'
     static_configs:
       - targets:
-          - 'localhost:16686'
+          - 'reactory_jaeger:14269'
