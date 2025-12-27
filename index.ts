@@ -1,5 +1,19 @@
 import middleware from "./middleware";
 import graph from "./graphql";
+import routes from "./routes";
+
+// Export telemetry class and types
+export { 
+  ReactoryTelemetry,
+  type MetricAttributes,
+  type MetricOptions,
+  type ICounter,
+  type IHistogram,
+  type IUpDownCounter,
+  type IGauge,
+  type IReactoryTelemetry
+} from "./ReactoryTelemetry";
+
 const ReactoryTelemetryModule: Reactory.Server.IReactoryModule = {
   name: "ReactoryTelemetry",
   version: "1.0.0",
@@ -16,7 +30,7 @@ const ReactoryTelemetryModule: Reactory.Server.IReactoryModule = {
   models: [],
   passportProviders: [],
   pdfs: [],
-  routes: {},
+  routes,
   services: [],
   translations: [],
   workflows: [],
