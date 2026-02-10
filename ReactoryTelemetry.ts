@@ -251,6 +251,60 @@ export class ReactoryTelemetry implements IReactoryTelemetry {
   }
 
   /**
+   * Increment a counter metric by a specified value
+   * @param name 
+   * @param value 
+   * @param attributes 
+   */
+  increment(name: string, value: number = 1, attributes: MetricAttributes = {}, options: MetricOptions = {}): void {
+    const counter = this.createCounter(name, options);
+    counter.add(value, attributes);
+  }
+
+  /**
+   * decrement a counter metric by a specified value
+   * @param name 
+   * @param value 
+   * @param attributes 
+   */
+  decrement(name: string, value: number = 1, attributes: MetricAttributes = {}, options: MetricOptions = {}): void {
+    const counter = this.createUpDownCounter(name, options);
+    counter.add(-value, attributes);
+  }
+
+  /**
+   * Record a value to a histogram metric
+   * @param name 
+   * @param value 
+   * @param attributes 
+   */
+  recordHistogram(
+    name: string,
+    value: number,
+    attributes: MetricAttributes = {},
+    options: MetricOptions = {}
+  ): void {
+    const histogram = this.createHistogram(name, options);
+    histogram.record(value, attributes);
+  }
+
+  /**
+   * Record a value to a gauge metric
+   * @param name 
+   * @param value 
+   * @param attributes 
+   */
+  recordGauge(
+    name: string,
+    value: number,
+    attributes: MetricAttributes = {},
+    options: MetricOptions = {}
+  ): void {
+    const gauge = this.createGauge(name, options);
+    gauge.set(value, attributes);
+  }
+
+  /**
    * Helper to measure execution time with a histogram
    * Returns a function to call when the operation completes
    */

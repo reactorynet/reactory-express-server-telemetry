@@ -1,0 +1,265 @@
+"""
+Telemetry data source type
+Supported telemetry backends
+"""
+enum TelemetryDataSource {
+  """OpenTelemetry metrics and traces"""
+  OTEL
+  """Prometheus metrics"""
+  PROMETHEUS
+  """Application logs"""
+  LOGS
+  """Custom metrics stored in database"""
+  DATABASE
+}
+
+"""
+Query parameter for telemetry data
+Flexible key-value parameter system
+"""
+input TelemetryQueryParameter {
+  """Parameter name"""
+  key: String!
+  """Parameter value (can be string, number, boolean, or JSON)"""
+  value: String!
+  """Parameter type hint for proper casting"""
+  type: String
+}
+
+type TelemetryTimeRange {
+  """Start time in ISO 8601 format or Unix timestamp"""
+  start: String!
+  """End time in ISO 8601 format or Unix timestamp"""
+  end: String!
+  """Time zone for the query (default: UTC)"""
+  timezone: String
+}
+
+
+"""
+Time range filter for telemetry queries
+"""
+input TelemetryTimeRangeInput {
+  """Start time in ISO 8601 format or Unix timestamp"""
+  start: String!
+  """End time in ISO 8601 format or Unix timestamp"""
+  end: String!
+  """Time zone for the query (default: UTC)"""
+  timezone: String
+}
+
+"""
+Aggregation function for time-series data
+"""
+enum TelemetryAggregation {
+  """Average value"""
+  AVG
+  """Sum of values"""
+  SUM
+  """Minimum value"""
+  MIN
+  """Maximum value"""
+  MAX
+  """Count of data points"""
+  COUNT
+  """Median value"""
+  MEDIAN
+  """95th percentile"""
+  P95
+  """99th percentile"""
+  P99
+  """Standard deviation"""
+  STDDEV
+}
+
+"""
+Input for querying telemetry data
+"""
+input TelemetryQueryInput {
+  """Optional connection ID for specific data source instance"""
+  connectionId: String
+  """Target data source"""
+  source: TelemetryDataSource!
+  """Query string (format depends on data source)"""
+  query: String!
+  """Query parameters"""
+  parameters: [TelemetryQueryParameter!]
+  """Time range filter"""
+  timeRange: TelemetryTimeRangeInput
+  """Group by fields"""
+  groupBy: [String!]
+  """Aggregation function"""
+  aggregation: TelemetryAggregation
+  """Limit number of results"""
+  limit: Int
+  """Offset for pagination"""
+  offset: Int
+}
+
+"""
+Single data point in a telemetry series
+"""
+type TelemetryDataPoint {
+  """Timestamp of the data point"""
+  timestamp: String!
+  """Numeric value"""
+  value: Float!
+  """Additional labels/tags for this data point"""
+  labels: Any
+}
+
+"""
+Time series data
+"""
+type TelemetrySeries {
+  """Series name/identifier"""
+  name: String!
+  """Series labels/tags"""
+  labels: Any
+  """Data points in the series"""
+  data: [TelemetryDataPoint!]!
+  """Unit of measurement"""
+  unit: String
+  """Series metadata"""
+  metadata: Any
+}
+
+"""
+Result of a telemetry query
+"""
+type TelemetryQueryResult {
+  """Query that was executed"""
+  query: String!
+  """Optional connection ID used"""
+  connectionId: String
+  """Data source that was queried"""
+  source: TelemetryDataSource!
+  """Time series results"""
+  series: [TelemetrySeries!]!
+  """Total number of series (for pagination)"""
+  totalSeries: Int!
+  """Total number of data points across all series"""
+  totalDataPoints: Int!
+  """Query execution time in milliseconds"""
+  executionTime: Int
+  """Any warnings or notices about the query"""
+  warnings: [String!]
+  """Query metadata"""
+  metadata: Any
+}
+
+"""
+Available metric definition
+"""
+type TelemetryMetric {
+  """Metric name"""
+  name: String!
+  """Metric description"""
+  description: String
+  """Metric type (counter, gauge, histogram, etc.)"""
+  type: String!
+  """Unit of measurement"""
+  unit: String
+  """Available labels for this metric"""
+  labels: [String!]
+  """Data source where this metric is available"""
+  source: TelemetryDataSource!
+  """Optional connection ID if metric is from a specific instance"""
+  connectionId: String
+}
+
+"""
+Input for listing available metrics
+"""
+input TelemetryMetricsFilter {
+  """Optional connection ID to filter metrics from a specific instance"""
+  connectionId: String
+  """Filter by data source"""
+  source: TelemetryDataSource
+  """Filter by metric type"""
+  type: String
+  """Search term for metric name or description"""
+  search: String
+  """Filter by labels"""
+  labels: [String!]
+}
+
+"""
+Aggregated metric statistics
+"""
+type TelemetryMetricStats {
+  """Metric name"""
+  metricName: String!
+  """Time range for the statistics"""
+  timeRange: TelemetryTimeRange!
+  """Average value"""
+  avg: Float
+  """Minimum value"""
+  min: Float
+  """Maximum value"""
+  max: Float
+  """Sum of values"""
+  sum: Float
+  """Count of data points"""
+  count: Int
+  """Standard deviation"""
+  stddev: Float
+  """Percentile values"""
+  percentiles: Any
+}
+
+"""
+Input for getting metric statistics
+"""
+input TelemetryMetricStatsInput {
+  """Metric name"""
+  metricName: String!
+  """Optional connection ID for specific data source instance"""
+  connectionId: String
+  """Data source"""
+  source: TelemetryDataSource!
+  """Time range"""
+  timeRange: TelemetryTimeRangeInput!
+  """Additional filters"""
+  filters: [TelemetryQueryParameter!]
+}
+
+extend type Query {
+  """
+  Query telemetry data from various sources
+  """
+  queryTelemetry(input: TelemetryQueryInput!): TelemetryQueryResult!
+  
+  """
+  List available metrics from telemetry sources
+  """
+  listTelemetryMetrics(filter: TelemetryMetricsFilter): [TelemetryMetric!]!
+  
+  """
+  Get aggregated statistics for a metric
+  """
+  getTelemetryMetricStats(input: TelemetryMetricStatsInput!): TelemetryMetricStats!
+  
+  """
+  Get available data sources and their status
+  """
+  getTelemetrySources: [TelemetrySourceStatus!]!
+}
+
+"""
+Status of a telemetry data source
+"""
+type TelemetrySourceStatus {
+  """Data source identifier"""
+  source: TelemetryDataSource!
+  """Whether the source is available"""
+  available: Boolean!
+  """Source connection status"""
+  status: String!
+  """Number of metrics available"""
+  metricCount: Int
+  """Last successful query timestamp"""
+  lastQuery: String
+  """Source-specific metadata"""
+  metadata: Any
+}
