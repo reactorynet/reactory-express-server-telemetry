@@ -5,7 +5,7 @@
  * including OpenTelemetry, Prometheus, logs, and database metrics
  */
 
-import Reactory from '@reactory/reactory-core';
+import Reactory from '@reactorynet/reactory-core';
 import logger from '@reactory/server-core/logging';
 
 export interface TelemetryQueryParameter {

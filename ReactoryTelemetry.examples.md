@@ -140,7 +140,7 @@ const result = context.telemetry.measure(
 ## Complete Service Example
 
 ```typescript
-import Reactory from '@reactory/reactory-core';
+import Reactory from '@reactorynet/reactory-core';
 
 class MyService implements Reactory.Service.IReactoryService {
   name = 'MyService';

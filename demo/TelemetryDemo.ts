@@ -5,7 +5,7 @@
  * in various scenarios within the Reactory framework.
  */
 
-import Reactory from '@reactory/reactory-core';
+import Reactory from '@reactorynet/reactory-core';
 import { service } from '@reactory/server-core/application/decorators';
 
 /**

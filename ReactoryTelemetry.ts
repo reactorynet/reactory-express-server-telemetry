@@ -14,7 +14,7 @@
 
 import meter from '@reactory/server-modules/reactory-telemetry/prometheus/meter';
 import logger from '@reactory/server-core/logging';
-import Reactory from '@reactory/reactory-core';
+import Reactory from '@reactorynet/reactory-core';
 import { 
   Counter, 
   Histogram, 
