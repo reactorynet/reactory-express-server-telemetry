@@ -4,20 +4,19 @@ apiVersion: 1
 datasources:
   - name: Reactory Jaeger
     type: jaeger
-    url: http://reactory_jaeger:16686
+    url: localhost:16686
     access: proxy
     isDefault: false
     editable: false
 
   - name: Reactory Postgres
     type: postgres
-    url: reactory_postgres:5432
+    url: postgresql://localhost:5432/reactory
     user: reactory
     secureJsonData:
       password: reactory
     jsonData:
       database: reactory
-      sslmode: disable
 
   - name: Reactory MongoDB
     type: grafana-mongodb-datasource
@@ -27,14 +26,14 @@ datasources:
     enabled: true
     isDefault: true
     jsonData:
-      connection: reactory_mongodb:27017
+      connection: localhost:27017
       user: reactory
     secureJsonData:
       password: reactory
 
   - name: Reactory Redis
     type: redis
-    url: redis://reactory_redis:6379
+    url: localhost:6379
     access: proxy
     isDefault: false
     editable: false
@@ -44,7 +43,7 @@ datasources:
   - name: Reactory Prometheus
     type: prometheus
     access: proxy
-    url: http://reactory_prometheus:9090
+    url: localhost:9090
     jsonData:
       httpMethod: POST
       manageAlerts: true
