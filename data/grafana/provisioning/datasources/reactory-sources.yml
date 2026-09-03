@@ -29,7 +29,7 @@ datasources:
       connection: localhost:27017
       user: reactory
     secureJsonData:
-      password: reactory
+      password: reactorycore
 
   - name: Reactory Redis
     type: redis
