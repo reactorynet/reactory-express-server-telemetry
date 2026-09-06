@@ -17,6 +17,7 @@ datasources:
       password: reactory
     jsonData:
       database: reactory
+      sslmode: disable
 
   - name: Reactory MongoDB
     type: grafana-mongodb-datasource
@@ -42,8 +43,11 @@ datasources:
 
   - name: Reactory Prometheus
     type: prometheus
+    uid: PEFFA43120800B12A
     access: proxy
     url: $REACTORY_PROMETHEUS_URL
+    isDefault: false
+    editable: true
     jsonData:
       httpMethod: POST
       manageAlerts: true

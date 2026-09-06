@@ -2,7 +2,6 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
-import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { Resource } from '@opentelemetry/resources';
 import { 
@@ -33,8 +32,6 @@ const start = () => {
     environment: REACTORY_DEPLOYMENT_ENVIRONMENT,
     jaegerTraces: REACTORY_JAEGER_TRACE_EXPORTER_URL,
     jaegerMetrics: REACTORY_JAEGER_METRIC_READER_URL,
-    prometheusPort: REACTORY_PROMETHEUS_EXPORTER_PORT,
-    prometheusHost: REACTORY_PROMETHEUS_EXPORTER_HOST,
   });
 
   // Create resource with service information
@@ -44,19 +41,12 @@ const start = () => {
     'deployment.environment': REACTORY_DEPLOYMENT_ENVIRONMENT,
   });
 
-  // Create Prometheus exporter that exposes /metrics endpoint
-  const prometheusExporter = new PrometheusExporter({
-    port: parseInt(REACTORY_PROMETHEUS_EXPORTER_PORT),
-    host: REACTORY_PROMETHEUS_EXPORTER_HOST,
-    preventServerStart: false,
-  });
-
   // Create OTLP metric exporter for Jaeger
   const otlpMetricExporter = new OTLPMetricExporter({
     url: REACTORY_JAEGER_METRIC_READER_URL,
   });
 
-  // Create metric reader with both exporters
+  // Create metric reader for OTLP
   const metricReader = new PeriodicExportingMetricReader({
     exporter: otlpMetricExporter,
     exportIntervalMillis: 10000,
@@ -114,17 +104,6 @@ const start = () => {
     metricReader,
     instrumentations: [instrumentations],
   });
-
-  // Start Prometheus exporter (creates HTTP server on specified port)
-  prometheusExporter.startServer()
-    .then(() => {
-      logger.info(`Prometheus metrics endpoint started`, {
-        url: `http://${REACTORY_PROMETHEUS_EXPORTER_HOST}:${REACTORY_PROMETHEUS_EXPORTER_PORT}/metrics`,
-      });
-    })
-    .catch((error) => {
-      logger.error('Failed to start Prometheus exporter', { error });
-    });
 
   // Start the SDK (synchronous)
   try {

@@ -4,8 +4,10 @@ noProtocol() {
 }
 
 export PROMETHEUS_URL=$(noProtocol ${REACTORY_PROMETHEUS_URL:-localhost:9090})
-export GRAFANA_URL=$(noProtocol ${REACTORY_GRAFANA_URL:-localhost:3001})
-export JAEGER_URL=$(noProtocol ${REACTORY_JAEGER_URL:-localhost:16686})
+export EXPRESS_SERVER_HOST_URL=$(noProtocol ${REACTORY_EXPRESS_SERVER_HOST_URL:-host.containers.internal:9464})
+export EXPRESS_SERVER_CONTAINER_URL=$(noProtocol ${REACTORY_EXPRESS_SERVER_CONTAINER_URL:-reactory-express-server:9464})
+export GRAFANA_URL=$(noProtocol ${REACTORY_GRAFANA_URL:-reactory-grafana:3000})
+export JAEGER_URL=$(noProtocol ${REACTORY_JAEGER_URL:-reactory-jaeger:14269})
 export REACTORY_MONGODB=$(noProtocol ${MONGO_URI:-localhost:27017})
 export REACTORY_POSTGRES_URL=$(noProtocol ${REACTORY_POSTGRES_URL:-postgresql://localhost:5432/reactory})
 export REACTORY_REDIS_URL=$(noProtocol ${REACTORY_REDIS_URL:-localhost:6379})

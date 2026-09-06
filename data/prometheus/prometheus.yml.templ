@@ -15,6 +15,19 @@ scrape_configs:
       - targets:
           - '$PROMETHEUS_URL'
 
+  - job_name: 'reactory-express-server'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    static_configs:
+      - targets:
+          - '$EXPRESS_SERVER_HOST_URL'
+        labels:
+          instance: 'host'
+      - targets:
+          - '$EXPRESS_SERVER_CONTAINER_URL'
+        labels:
+          instance: 'container'
+
   - job_name: 'reactory-grafana'
     static_configs:
       - targets:
