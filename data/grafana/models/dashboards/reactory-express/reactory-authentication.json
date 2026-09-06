@@ -87,7 +87,7 @@
             "uid": "PEFFA43120800B12A"
           },
           "editorMode": "code",
-          "expr": "sum(rate(auth_success_total[5m])) / sum(rate(auth_attempts_total[5m]))",
+          "expr": "clamp_max((sum(rate(auth_success_total[5m])) or vector(1)) / (sum(rate(auth_attempts_total[5m])) > 0 or vector(1)), 1)",
           "instant": false,
           "legendFormat": "Success Rate",
           "range": true,
@@ -237,7 +237,7 @@
             "uid": "PEFFA43120800B12A"
           },
           "editorMode": "code",
-          "expr": "sum(increase(auth_failure_total[5m]))",
+          "expr": "sum(increase(auth_failure_total[5m])) or vector(0)",
           "instant": false,
           "legendFormat": "Failures",
           "range": true,
