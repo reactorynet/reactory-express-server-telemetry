@@ -39,7 +39,7 @@ datasources:
     isDefault: false
     editable: false
     jsonData:
-      password: reactory
+      password: reactorycore
 
   - name: Reactory Prometheus
     type: prometheus
