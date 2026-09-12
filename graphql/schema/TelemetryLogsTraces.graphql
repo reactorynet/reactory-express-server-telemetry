@@ -134,7 +134,31 @@ input TelemetryTraceSearchInput {
   timeRange: TelemetryTimeRangeInput
 }
 
+"""
+A dashboard known to a live Grafana instance (import source)
+"""
+type TelemetryGrafanaDashboardRef {
+  uid: String!
+  title: String!
+  uri: String
+  tags: [String!]
+  folderTitle: String
+}
+
 extend type Query {
+  """
+  List dashboards on a live Grafana instance. `connectionId` names a partner
+  setting (e.g. "reactory.grafana.connection"); falls back to
+  REACTORY_GRAFANA_HOST/PORT/PROTOCOL/TOKEN.
+  """
+  listTelemetryGrafanaDashboards(connectionId: String): [TelemetryGrafanaDashboardRef!]!
+
+  """
+  Fetch one Grafana dashboard's raw JSON model by uid — the client converts it
+  to a telemetry dashboard definition.
+  """
+  getTelemetryGrafanaDashboard(uid: String!, connectionId: String): Any!
+
   """
   List the values of one label — Prometheus /api/v1/label/{label}/values or
   Loki /loki/api/v1/label/{label}/values. Powers label filter suggestions and

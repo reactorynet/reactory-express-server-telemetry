@@ -78,10 +78,27 @@ export interface JaegerConnectionSettings {
   queryPort?: number;
 }
 
-export type TelemetryConnectionSettings = 
-  | PrometheusConnectionSettings 
-  | LokiConnectionSettings 
-  | JaegerConnectionSettings;
+export interface GrafanaConnectionSettings {
+  host: string;
+  port: number;
+  protocol: 'http' | 'https';
+  /** Grafana service-account token (Bearer). Anonymous access when omitted. */
+  token?: string;
+}
+
+export type TelemetryConnectionSettings =
+  | PrometheusConnectionSettings
+  | LokiConnectionSettings
+  | JaegerConnectionSettings
+  | GrafanaConnectionSettings;
+
+export interface GrafanaDashboardRef {
+  uid: string;
+  title: string;
+  uri?: string;
+  tags?: string[];
+  folderTitle?: string;
+}
 
 export interface TelemetryDataPoint {
   timestamp: string;
@@ -891,6 +908,78 @@ export class TelemetryQueryService implements Reactory.Service.IReactoryService 
     const data = await response.json();
     const values = data.status === 'success' && Array.isArray(data.data) ? data.data : [];
     return values.filter((value: unknown) => typeof value === 'string');
+  }
+
+  // ── Grafana (dashboard import) ─────────────────────────────────────────────
+
+  /**
+   * Resolve Grafana connection settings: partner setting (connectionId, e.g.
+   * "reactory.grafana.connection") first, else REACTORY_GRAFANA_* env vars.
+   */
+  private getGrafanaSettings(connectionId?: string): GrafanaConnectionSettings {
+    if (connectionId && this.context.partner) {
+      const setting = this.context.partner.getSetting<GrafanaConnectionSettings>(connectionId);
+      if (setting?.data) return setting.data;
+    }
+    return {
+      host: process.env.REACTORY_GRAFANA_HOST || 'localhost',
+      port: Number.parseInt(process.env.REACTORY_GRAFANA_PORT || '3000'),
+      protocol: (process.env.REACTORY_GRAFANA_PROTOCOL || 'http') as 'http' | 'https',
+      token: process.env.REACTORY_GRAFANA_TOKEN,
+    };
+  }
+
+  private grafanaRequestInit(settings: GrafanaConnectionSettings): RequestInit {
+    return settings.token
+      ? { headers: { Authorization: `Bearer ${settings.token}` } }
+      : {};
+  }
+
+  /**
+   * List dashboards known to a live Grafana instance (/api/search).
+   */
+  async listGrafanaDashboards(connectionId?: string): Promise<GrafanaDashboardRef[]> {
+    const settings = this.getGrafanaSettings(connectionId);
+    const url = `${settings.protocol}://${settings.host}:${settings.port}/api/search?type=dash-db`;
+
+    const response = await fetch(url, this.grafanaRequestInit(settings));
+    if (!response.ok) {
+      throw new Error(`Grafana search failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter((entry: any) => entry && entry.uid)
+      .map((entry: any) => ({
+        uid: entry.uid,
+        title: entry.title || entry.uid,
+        uri: entry.url || entry.uri,
+        tags: Array.isArray(entry.tags) ? entry.tags : [],
+        folderTitle: entry.folderTitle,
+      }));
+  }
+
+  /**
+   * Fetch one Grafana dashboard model by uid (/api/dashboards/uid/{uid}).
+   * Returns the raw dashboard JSON — the client converts it to a
+   * TelemetryDashboardDefinition with its grafanaImport mapping.
+   */
+  async getGrafanaDashboard(uid: string, connectionId?: string): Promise<any> {
+    if (!uid) throw new Error('uid is required');
+    const settings = this.getGrafanaSettings(connectionId);
+    const url = `${settings.protocol}://${settings.host}:${settings.port}/api/dashboards/uid/${encodeURIComponent(uid)}`;
+
+    const response = await fetch(url, this.grafanaRequestInit(settings));
+    if (!response.ok) {
+      throw new Error(`Grafana dashboard lookup failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    if (!data?.dashboard) {
+      throw new Error(`Grafana dashboard not found: ${uid}`);
+    }
+    return data.dashboard;
   }
 
   // ── Traces (Jaeger Query API) ──────────────────────────────────────────────

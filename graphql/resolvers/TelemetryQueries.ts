@@ -137,6 +137,46 @@ class TelemetryQueryResolvers {
   }
 
   /**
+   * List dashboards on a live Grafana instance (import source)
+   */
+  @roles(['ADMIN', 'DEVELOPER'], 'args.context')
+  @query('listTelemetryGrafanaDashboards')
+  async listTelemetryGrafanaDashboards(
+    obj: any,
+    params: { connectionId?: string },
+    context: Reactory.Server.IReactoryContext
+  ): Promise<any[]> {
+    const service = getTelemetryQueryService(context);
+    if (!service) throw new Error('TelemetryQueryService not available');
+    try {
+      return await service.listGrafanaDashboards(params.connectionId);
+    } catch (error) {
+      context.log('Error listing Grafana dashboards', { error }, 'error');
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch one Grafana dashboard's raw JSON model by uid
+   */
+  @roles(['ADMIN', 'DEVELOPER'], 'args.context')
+  @query('getTelemetryGrafanaDashboard')
+  async getTelemetryGrafanaDashboard(
+    obj: any,
+    params: { uid: string; connectionId?: string },
+    context: Reactory.Server.IReactoryContext
+  ): Promise<any> {
+    const service = getTelemetryQueryService(context);
+    if (!service) throw new Error('TelemetryQueryService not available');
+    try {
+      return await service.getGrafanaDashboard(params.uid, params.connectionId);
+    } catch (error) {
+      context.log('Error fetching Grafana dashboard', { error, uid: params.uid }, 'error');
+      throw error;
+    }
+  }
+
+  /**
    * List the values of one label (Prometheus/Loki) for filters and variables
    */
   @roles(['USER', 'ADMIN'], 'args.context')
