@@ -1,0 +1,157 @@
+"""
+Log and trace query types for the reactory-telemetry module.
+
+Logs are served from Grafana Loki's HTTP API. Log LINES do not fit the
+TelemetrySeries {timestamp, value: Float} shape, so they have a dedicated
+query (queryTelemetryLogs); metric-style LogQL (rate/count_over_time) also
+works through the generic queryTelemetry with source: LOGS.
+
+Traces are served from the Jaeger Query HTTP API.
+"""
+
+type TelemetryLogEntry {
+  """
+  ISO-8601 timestamp of the log line
+  """
+  timestamp: String!
+  """
+  The raw log line
+  """
+  line: String!
+  """
+  Detected or labelled severity (error, warn, info, debug, trace)
+  """
+  level: String
+}
+
+type TelemetryLogStream {
+  """
+  The stream's label set (job, container, level, ...)
+  """
+  labels: Any
+  entries: [TelemetryLogEntry!]!
+}
+
+type TelemetryLogQueryResult {
+  query: String!
+  connectionId: String
+  streams: [TelemetryLogStream!]!
+  totalEntries: Int!
+  """
+  Query execution time in milliseconds
+  """
+  executionTime: Int
+  warnings: [String!]
+}
+
+input TelemetryLogQueryInput {
+  """
+  Partner connection setting name, e.g. "reactory.loki.connection"
+  """
+  connectionId: String
+  """
+  LogQL stream selector/pipeline, e.g. {job="reactory"} |= "error"
+  """
+  query: String!
+  timeRange: TelemetryTimeRangeInput
+  """
+  Maximum entries to return (default 500, Loki caps at 5000)
+  """
+  limit: Int
+  """
+  'backward' (newest first, default) or 'forward'
+  """
+  direction: String
+}
+
+type TelemetryTraceSpan {
+  spanId: String!
+  parentSpanId: String
+  operationName: String!
+  serviceName: String
+  """
+  ISO-8601 start timestamp
+  """
+  startTime: String!
+  """
+  Span duration in milliseconds
+  """
+  duration: Float!
+  tags: Any
+  logs: Any
+  """
+  'error' when the span carries an error tag, else 'ok'
+  """
+  status: String
+}
+
+type TelemetryTrace {
+  traceId: String!
+  spans: [TelemetryTraceSpan!]!
+  startTime: String
+  """
+  Total trace duration in milliseconds
+  """
+  duration: Float
+  services: [String!]
+  warnings: [String!]
+}
+
+type TelemetryTraceSummary {
+  traceId: String!
+  rootOperation: String
+  rootService: String
+  startTime: String
+  """
+  Trace duration in milliseconds
+  """
+  duration: Float
+  spanCount: Int!
+  errorCount: Int!
+  services: [String!]
+}
+
+input TelemetryTraceSearchInput {
+  """
+  Partner connection setting name, e.g. "reactory.jaeger.connection"
+  """
+  connectionId: String
+  """
+  Service name to search (required by the Jaeger API)
+  """
+  service: String!
+  operation: String
+  """
+  Jaeger tag filters as a JSON object, e.g. {"http.status_code": "500"}
+  """
+  tags: Any
+  """
+  Minimum span duration filter, Jaeger syntax (e.g. "100ms", "1.2s")
+  """
+  minDuration: String
+  maxDuration: String
+  limit: Int
+  timeRange: TelemetryTimeRangeInput
+}
+
+extend type Query {
+  """
+  Query log lines from Loki (LogQL streams)
+  """
+  queryTelemetryLogs(input: TelemetryLogQueryInput!): TelemetryLogQueryResult!
+
+  """
+  Search traces in Jaeger by service/operation/tags/duration
+  """
+  searchTelemetryTraces(input: TelemetryTraceSearchInput!): [TelemetryTraceSummary!]!
+
+  """
+  Fetch one trace with all its spans
+  """
+  getTelemetryTrace(traceId: String!, connectionId: String): TelemetryTrace!
+
+  """
+  List the service names known to Jaeger (for trace search pickers)
+  """
+  listTelemetryTraceServices(connectionId: String): [String!]!
+}

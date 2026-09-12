@@ -1,9 +1,9 @@
 import ReactoryGraphqlTelemetetryPlugin from './ReactoryGraphQLTelemeteryPlugin';
-import TelemetryQueriesSchema from './schema';
+import TelemetrySchemas from './schema';
 import TelemetryQueryResolvers from './resolvers';
 
-const ReactoryTelemetryGraphDefinition: Reactory.Graph.IGraphDefinitions = { 
-  Types: [TelemetryQueriesSchema],
+const ReactoryTelemetryGraphDefinition: Reactory.Graph.IGraphDefinitions = {
+  Types: [...TelemetrySchemas],
   Resolvers: TelemetryQueryResolvers,
   Plugins: [
     ReactoryGraphqlTelemetetryPlugin

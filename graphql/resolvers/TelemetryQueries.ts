@@ -15,7 +15,12 @@ import type {
   TelemetryQueryResult,
   TelemetryMetric,
   TelemetryMetricStats,
-  TelemetrySourceStatus
+  TelemetrySourceStatus,
+  TelemetryLogQueryInput,
+  TelemetryLogQueryResult,
+  TelemetryTraceSearchInput,
+  TelemetryTraceSummary,
+  TelemetryTrace
 } from '../../services/TelemetryQueryService';
 
 /**
@@ -127,6 +132,104 @@ class TelemetryQueryResolvers {
       return sources;
     } catch (error) {
       context.log('Error getting telemetry sources', { error }, 'error');
+      throw error;
+    }
+  }
+
+  /**
+   * Query raw log lines from Loki (LogQL streams)
+   */
+  @roles(['USER', 'ADMIN'], 'args.context')
+  @query('queryTelemetryLogs')
+  async queryTelemetryLogs(
+    obj: any,
+    params: { input: TelemetryLogQueryInput },
+    context: Reactory.Server.IReactoryContext
+  ): Promise<TelemetryLogQueryResult> {
+    const service = getTelemetryQueryService(context);
+
+    if (!service) {
+      throw new Error('TelemetryQueryService not available');
+    }
+
+    try {
+      context.log('Querying telemetry logs', { input: params.input }, 'debug');
+      return await service.queryTelemetryLogs(params.input);
+    } catch (error) {
+      context.log('Error querying telemetry logs', { error, input: params.input }, 'error');
+      throw error;
+    }
+  }
+
+  /**
+   * Search traces in Jaeger
+   */
+  @roles(['USER', 'ADMIN'], 'args.context')
+  @query('searchTelemetryTraces')
+  async searchTelemetryTraces(
+    obj: any,
+    params: { input: TelemetryTraceSearchInput },
+    context: Reactory.Server.IReactoryContext
+  ): Promise<TelemetryTraceSummary[]> {
+    const service = getTelemetryQueryService(context);
+
+    if (!service) {
+      throw new Error('TelemetryQueryService not available');
+    }
+
+    try {
+      context.log('Searching telemetry traces', { input: params.input }, 'debug');
+      return await service.searchTraces(params.input);
+    } catch (error) {
+      context.log('Error searching telemetry traces', { error, input: params.input }, 'error');
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch one trace with all its spans
+   */
+  @roles(['USER', 'ADMIN'], 'args.context')
+  @query('getTelemetryTrace')
+  async getTelemetryTrace(
+    obj: any,
+    params: { traceId: string; connectionId?: string },
+    context: Reactory.Server.IReactoryContext
+  ): Promise<TelemetryTrace> {
+    const service = getTelemetryQueryService(context);
+
+    if (!service) {
+      throw new Error('TelemetryQueryService not available');
+    }
+
+    try {
+      return await service.getTrace(params.traceId, params.connectionId);
+    } catch (error) {
+      context.log('Error fetching telemetry trace', { error, traceId: params.traceId }, 'error');
+      throw error;
+    }
+  }
+
+  /**
+   * List the service names known to Jaeger
+   */
+  @roles(['USER', 'ADMIN'], 'args.context')
+  @query('listTelemetryTraceServices')
+  async listTelemetryTraceServices(
+    obj: any,
+    params: { connectionId?: string },
+    context: Reactory.Server.IReactoryContext
+  ): Promise<string[]> {
+    const service = getTelemetryQueryService(context);
+
+    if (!service) {
+      throw new Error('TelemetryQueryService not available');
+    }
+
+    try {
+      return await service.listTraceServices(params.connectionId);
+    } catch (error) {
+      context.log('Error listing trace services', { error }, 'error');
       throw error;
     }
   }

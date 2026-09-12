@@ -6,4 +6,11 @@ const TelemetryQueriesSchema = readFileSync(
   'utf8'
 );
 
-export default TelemetryQueriesSchema;
+const TelemetryLogsTracesSchema = readFileSync(
+  join(__dirname, 'TelemetryLogsTraces.graphql'),
+  'utf8'
+);
+
+export { TelemetryQueriesSchema, TelemetryLogsTracesSchema };
+
+export default [TelemetryQueriesSchema, TelemetryLogsTracesSchema];

@@ -71,6 +71,11 @@ export interface JaegerConnectionSettings {
   host: string;
   port: number;
   protocol: 'http' | 'https';
+  /**
+   * Jaeger Query API port (default 16686). `port` is the ingest port
+   * (agent 6831 / OTLP 4318) and is not usable for trace queries.
+   */
+  queryPort?: number;
 }
 
 export type TelemetryConnectionSettings = 
@@ -148,6 +153,84 @@ export interface TelemetrySourceStatus {
   metricCount?: number;
   lastQuery?: string;
   metadata?: Record<string, any>;
+}
+
+// ── Logs (Loki) ──────────────────────────────────────────────────────────────
+
+export interface TelemetryLogEntry {
+  timestamp: string;
+  line: string;
+  level?: string;
+}
+
+export interface TelemetryLogStream {
+  labels?: Record<string, any>;
+  entries: TelemetryLogEntry[];
+}
+
+export interface TelemetryLogQueryInput {
+  connectionId?: string;
+  query: string;
+  timeRange?: TelemetryTimeRange;
+  limit?: number;
+  direction?: 'backward' | 'forward';
+}
+
+export interface TelemetryLogQueryResult {
+  query: string;
+  connectionId?: string;
+  streams: TelemetryLogStream[];
+  totalEntries: number;
+  executionTime?: number;
+  warnings?: string[];
+}
+
+// ── Traces (Jaeger) ──────────────────────────────────────────────────────────
+
+export interface TelemetryTraceSpan {
+  spanId: string;
+  parentSpanId?: string;
+  operationName: string;
+  serviceName?: string;
+  startTime: string;
+  /** milliseconds */
+  duration: number;
+  tags?: Record<string, any>;
+  logs?: any[];
+  status?: 'ok' | 'error';
+}
+
+export interface TelemetryTrace {
+  traceId: string;
+  spans: TelemetryTraceSpan[];
+  startTime?: string;
+  /** milliseconds */
+  duration?: number;
+  services?: string[];
+  warnings?: string[];
+}
+
+export interface TelemetryTraceSummary {
+  traceId: string;
+  rootOperation?: string;
+  rootService?: string;
+  startTime?: string;
+  /** milliseconds */
+  duration?: number;
+  spanCount: number;
+  errorCount: number;
+  services?: string[];
+}
+
+export interface TelemetryTraceSearchInput {
+  connectionId?: string;
+  service: string;
+  operation?: string;
+  tags?: Record<string, any>;
+  minDuration?: string;
+  maxDuration?: string;
+  limit?: number;
+  timeRange?: TelemetryTimeRange;
 }
 
 /**
@@ -428,25 +511,132 @@ export class TelemetryQueryService implements Reactory.Service.IReactoryService 
   }
 
   /**
-   * Query application logs
+   * Query application logs via Loki's query_range API.
+   *
+   * Metric-style LogQL (rate, count_over_time, ...) returns a matrix and maps
+   * onto TelemetrySeries like Prometheus results, so the LOGS source works
+   * from the generic charting pipeline. Stream results (raw log lines) are
+   * mapped to per-entry value=1 points — use queryTelemetryLogs to read the
+   * actual lines.
    */
   private async queryLogs(
     input: TelemetryQueryInput,
     params: Record<string, any>,
     timeRange: { startMs: number; endMs: number }
   ): Promise<TelemetryQueryResult> {
-    // TODO: Implement log query logic
-    // This would connect to log aggregation service (Loki, Elasticsearch, etc.)
-    
-    logger.warn('Log query not fully implemented', { input });
-    
+    const lokiUrl = this.getLokiUrl(input.connectionId);
+    const warnings: string[] = [];
+
+    const url = new URL(`${lokiUrl}/loki/api/v1/query_range`);
+    url.searchParams.set('query', input.query);
+    url.searchParams.set('start', `${timeRange.startMs}000000`); // ns
+    url.searchParams.set('end', `${timeRange.endMs}000000`);
+    url.searchParams.set('step', `${this.calculateStep(timeRange.startMs, timeRange.endMs)}s`);
+    if (input.limit && input.limit > 0) url.searchParams.set('limit', String(input.limit));
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`Loki query failed: ${response.statusText}${body ? ` — ${body.slice(0, 200)}` : ''}`);
+    }
+
+    const data = await response.json();
+    const series: TelemetrySeries[] = [];
+
+    if (data.status === 'success' && data.data?.result) {
+      const resultType = data.data.resultType;
+
+      if (resultType === 'matrix') {
+        for (const result of data.data.result) {
+          series.push({
+            name: this.lokiStreamName(result.metric),
+            labels: result.metric,
+            data: (result.values || []).map(([timestamp, value]: [number, string]) => ({
+              timestamp: new Date(timestamp * 1000).toISOString(),
+              value: parseFloat(value),
+              labels: result.metric,
+            })),
+          });
+        }
+      } else if (resultType === 'streams') {
+        warnings.push('Stream (log line) result mapped to event points — use queryTelemetryLogs to read log lines');
+        for (const stream of data.data.result) {
+          series.push({
+            name: this.lokiStreamName(stream.stream),
+            labels: stream.stream,
+            data: (stream.values || []).map(([timestampNs]: [string, string]) => ({
+              timestamp: new Date(Number(timestampNs) / 1e6).toISOString(),
+              value: 1,
+              labels: stream.stream,
+            })),
+          });
+        }
+      }
+    }
+
+    const result: TelemetryQueryResult = {
+      query: input.query,
+      connectionId: input.connectionId,
+      source: TelemetryDataSource.LOGS,
+      series,
+      totalSeries: series.length,
+      totalDataPoints: series.reduce((sum, s) => sum + s.data.length, 0),
+      ...(warnings.length > 0 ? { warnings } : {}),
+    };
+
+    return this.applyPagination(result, input);
+  }
+
+  /**
+   * Query raw log lines from Loki (LogQL streams).
+   */
+  async queryTelemetryLogs(input: TelemetryLogQueryInput): Promise<TelemetryLogQueryResult> {
+    const startTime = Date.now();
+    const lokiUrl = this.getLokiUrl(input.connectionId);
+    const { startMs, endMs } = this.parseTimeRange(input.timeRange);
+
+    const url = new URL(`${lokiUrl}/loki/api/v1/query_range`);
+    url.searchParams.set('query', input.query);
+    url.searchParams.set('start', `${startMs}000000`); // ns
+    url.searchParams.set('end', `${endMs}000000`);
+    url.searchParams.set('limit', String(input.limit && input.limit > 0 ? Math.min(input.limit, 5000) : 500));
+    url.searchParams.set('direction', input.direction === 'forward' ? 'forward' : 'backward');
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`Loki query failed: ${response.statusText}${body ? ` — ${body.slice(0, 200)}` : ''}`);
+    }
+
+    const data = await response.json();
+    const streams: TelemetryLogStream[] = [];
+    const warnings: string[] = [];
+
+    if (data.status === 'success' && data.data?.result) {
+      if (data.data.resultType !== 'streams') {
+        warnings.push(`Expected a streams result, got ${data.data.resultType} — use queryTelemetry for metric LogQL`);
+      } else {
+        for (const stream of data.data.result) {
+          const labels = stream.stream || {};
+          streams.push({
+            labels,
+            entries: (stream.values || []).map(([timestampNs, line]: [string, string]) => ({
+              timestamp: new Date(Number(timestampNs) / 1e6).toISOString(),
+              line,
+              level: this.detectLogLevel(labels, line),
+            })),
+          });
+        }
+      }
+    }
+
     return {
       query: input.query,
-      source: TelemetryDataSource.LOGS,
-      series: [],
-      totalSeries: 0,
-      totalDataPoints: 0,
-      warnings: ['Log query support is under development']
+      connectionId: input.connectionId,
+      streams,
+      totalEntries: streams.reduce((sum, stream) => sum + stream.entries.length, 0),
+      executionTime: Date.now() - startTime,
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
   }
 
@@ -653,7 +843,177 @@ export class TelemetryQueryService implements Reactory.Service.IReactoryService 
     return sources;
   }
 
+  // ── Traces (Jaeger Query API) ──────────────────────────────────────────────
+
+  /**
+   * Search traces by service/operation/tags/duration.
+   */
+  async searchTraces(input: TelemetryTraceSearchInput): Promise<TelemetryTraceSummary[]> {
+    const jaegerUrl = this.getJaegerQueryUrl(input.connectionId);
+    const { startMs, endMs } = this.parseTimeRange(input.timeRange);
+
+    const url = new URL(`${jaegerUrl}/api/traces`);
+    url.searchParams.set('service', input.service);
+    if (input.operation) url.searchParams.set('operation', input.operation);
+    if (input.tags && Object.keys(input.tags).length > 0) url.searchParams.set('tags', JSON.stringify(input.tags));
+    if (input.minDuration) url.searchParams.set('minDuration', input.minDuration);
+    if (input.maxDuration) url.searchParams.set('maxDuration', input.maxDuration);
+    url.searchParams.set('limit', String(input.limit && input.limit > 0 ? input.limit : 20));
+    url.searchParams.set('start', `${startMs}000`); // µs
+    url.searchParams.set('end', `${endMs}000`);
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error(`Jaeger trace search failed: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return (data.data || []).map((trace: any) => this.summarizeJaegerTrace(trace));
+  }
+
+  /**
+   * Fetch one trace with all its spans.
+   */
+  async getTrace(traceId: string, connectionId?: string): Promise<TelemetryTrace> {
+    const jaegerUrl = this.getJaegerQueryUrl(connectionId);
+
+    const response = await fetch(`${jaegerUrl}/api/traces/${encodeURIComponent(traceId)}`);
+    if (!response.ok) {
+      throw new Error(`Jaeger trace lookup failed: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const trace = (data.data || [])[0];
+    if (!trace) {
+      throw new Error(`Trace not found: ${traceId}`);
+    }
+
+    return this.mapJaegerTrace(trace);
+  }
+
+  /**
+   * List the service names known to Jaeger.
+   */
+  async listTraceServices(connectionId?: string): Promise<string[]> {
+    const jaegerUrl = this.getJaegerQueryUrl(connectionId);
+
+    const response = await fetch(`${jaegerUrl}/api/services`);
+    if (!response.ok) {
+      throw new Error(`Jaeger services request failed: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return (data.data || []).filter((service: unknown) => typeof service === 'string');
+  }
+
   // Helper methods
+
+  private getLokiUrl(connectionId?: string): string {
+    const settings = this.getConnectionSettings<LokiConnectionSettings>(connectionId, TelemetryDataSource.LOGS);
+    if (!settings) {
+      throw new Error('Loki connection not configured. Configure a partner connection or REACTORY_LOKI_HOST/PORT.');
+    }
+    return this.buildConnectionUrl(settings);
+  }
+
+  /**
+   * Resolve the Jaeger QUERY API base URL. The stored connection's `port` is
+   * the ingest port (agent/OTLP); trace queries use `queryPort` when set,
+   * else REACTORY_JAEGER_QUERY_PORT, else Jaeger's default 16686.
+   */
+  private getJaegerQueryUrl(connectionId?: string): string {
+    const settings = this.getConnectionSettings<JaegerConnectionSettings>(connectionId, TelemetryDataSource.OTEL);
+    if (!settings) {
+      throw new Error('Jaeger connection not configured. Configure a partner connection or REACTORY_JAEGER_HOST.');
+    }
+    const queryPort = settings.queryPort
+      || Number.parseInt(process.env.REACTORY_JAEGER_QUERY_PORT || '16686');
+    return `${settings.protocol}://${settings.host}:${queryPort}`;
+  }
+
+  private lokiStreamName(labels: Record<string, any> = {}): string {
+    const pairs = Object.entries(labels)
+      .filter(([key]) => key !== '__name__')
+      .map(([key, value]) => `${key}="${value}"`);
+    return labels.__name__ || (pairs.length > 0 ? `{${pairs.join(',')}}` : 'logs');
+  }
+
+  private detectLogLevel(labels: Record<string, any>, line: string): string | undefined {
+    const labelled = labels.level || labels.detected_level || labels.severity;
+    if (labelled) return String(labelled).toLowerCase();
+    const match = /\b(fatal|error|warn(?:ing)?|info|debug|trace)\b/i.exec(line);
+    if (!match) return undefined;
+    const level = match[1].toLowerCase();
+    return level === 'warning' ? 'warn' : level;
+  }
+
+  private summarizeJaegerTrace(trace: any): TelemetryTraceSummary {
+    const spans: any[] = trace.spans || [];
+    const processes: Record<string, { serviceName?: string }> = trace.processes || {};
+
+    const root = spans.reduce((earliest: any, span: any) => {
+      const isRoot = !(span.references || []).some((ref: any) => ref.refType === 'CHILD_OF');
+      if (isRoot && (!earliest || span.startTime < earliest.startTime)) return span;
+      return earliest;
+    }, null) || spans.reduce((earliest: any, span: any) => (!earliest || span.startTime < earliest.startTime ? span : earliest), null);
+
+    const startUs = spans.length > 0 ? Math.min(...spans.map((span: any) => span.startTime)) : undefined;
+    const endUs = spans.length > 0 ? Math.max(...spans.map((span: any) => span.startTime + (span.duration || 0))) : undefined;
+
+    return {
+      traceId: trace.traceID,
+      rootOperation: root?.operationName,
+      rootService: root ? processes[root.processID]?.serviceName : undefined,
+      startTime: startUs !== undefined ? new Date(startUs / 1000).toISOString() : undefined,
+      duration: startUs !== undefined && endUs !== undefined ? (endUs - startUs) / 1000 : undefined,
+      spanCount: spans.length,
+      errorCount: spans.filter((span: any) => this.isErrorSpan(span)).length,
+      services: Array.from(new Set(Object.values(processes).map((process) => process.serviceName).filter(Boolean))) as string[],
+    };
+  }
+
+  private mapJaegerTrace(trace: any): TelemetryTrace {
+    const processes: Record<string, { serviceName?: string }> = trace.processes || {};
+    const spans: TelemetryTraceSpan[] = (trace.spans || []).map((span: any) => {
+      const parentRef = (span.references || []).find((ref: any) => ref.refType === 'CHILD_OF');
+      const tags = (span.tags || []).reduce((acc: Record<string, any>, tag: any) => {
+        acc[tag.key] = tag.value;
+        return acc;
+      }, {});
+      return {
+        spanId: span.spanID,
+        parentSpanId: parentRef?.spanID,
+        operationName: span.operationName,
+        serviceName: processes[span.processID]?.serviceName,
+        startTime: new Date(span.startTime / 1000).toISOString(),
+        duration: (span.duration || 0) / 1000,
+        tags,
+        logs: span.logs || [],
+        status: this.isErrorSpan(span) ? 'error' : 'ok',
+      };
+    });
+
+    spans.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+
+    const summary = this.summarizeJaegerTrace(trace);
+
+    return {
+      traceId: trace.traceID,
+      spans,
+      startTime: summary.startTime,
+      duration: summary.duration,
+      services: summary.services,
+      ...(trace.warnings && trace.warnings.length > 0 ? { warnings: trace.warnings } : {}),
+    };
+  }
+
+  private isErrorSpan(span: any): boolean {
+    return (span.tags || []).some(
+      (tag: any) =>
+        (tag.key === 'error' && (tag.value === true || tag.value === 'true')) ||
+        (tag.key === 'otel.status_code' && tag.value === 'ERROR'),
+    );
+  }
 
   /**
    * TelemetryAggregation -> PromQL aggregation operator. Quantile-style
