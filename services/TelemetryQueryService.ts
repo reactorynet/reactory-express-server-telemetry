@@ -94,6 +94,7 @@ export interface TelemetrySeries {
 
 export interface TelemetryQueryResult {
   query: string;
+  connectionId?: string;
   source: TelemetryDataSource;
   series: TelemetrySeries[];
   totalSeries: number;
@@ -110,9 +111,11 @@ export interface TelemetryMetric {
   unit?: string;
   labels?: string[];
   source: TelemetryDataSource;
+  connectionId?: string;
 }
 
 export interface TelemetryMetricsFilter {
+  connectionId?: string;
   source?: TelemetryDataSource;
   type?: string;
   search?: string;
@@ -415,9 +418,9 @@ export class TelemetryQueryService implements Reactory.Service.IReactoryService 
       }
 
       const data = await response.json();
-      
-      return this.formatPrometheusResponse(data, input);
-      
+
+      return this.applyPagination(this.formatPrometheusResponse(data, input), input);
+
     } catch (error) {
       logger.error('Error querying Prometheus', { error, input });
       throw error;
@@ -471,17 +474,88 @@ export class TelemetryQueryService implements Reactory.Service.IReactoryService 
   }
 
   /**
-   * List available metrics
+   * List available metrics.
+   *
+   * PROMETHEUS (the default) is served from the Prometheus HTTP API:
+   * /api/v1/label/__name__/values for the catalogue and /api/v1/metadata for
+   * type/help/unit enrichment. Other sources return [] until their query
+   * backends are implemented (OTEL/LOGS/DATABASE).
    */
   async listMetrics(filter?: TelemetryMetricsFilter): Promise<TelemetryMetric[]> {
-    const metrics: TelemetryMetric[] = [];
-    
-    // TODO: Aggregate metrics from all sources
-    // For now, return a placeholder
-    
-    logger.warn('List metrics not fully implemented', { filter });
-    
-    return metrics;
+    const source = filter?.source ?? TelemetryDataSource.PROMETHEUS;
+
+    if (source !== TelemetryDataSource.PROMETHEUS) {
+      logger.warn('listMetrics is only implemented for PROMETHEUS', { filter });
+      return [];
+    }
+
+    const connectionSettings = this.getConnectionSettings<PrometheusConnectionSettings>(
+      filter?.connectionId,
+      TelemetryDataSource.PROMETHEUS
+    );
+
+    if (!connectionSettings) {
+      logger.warn('listMetrics: Prometheus connection not configured', { filter });
+      return [];
+    }
+
+    const prometheusUrl = this.buildConnectionUrl(connectionSettings);
+
+    try {
+      const [namesResponse, metadataResponse] = await Promise.all([
+        fetch(`${prometheusUrl}/api/v1/label/__name__/values`),
+        fetch(`${prometheusUrl}/api/v1/metadata`),
+      ]);
+
+      if (!namesResponse.ok) {
+        throw new Error(`Prometheus label values request failed: ${namesResponse.statusText}`);
+      }
+
+      const namesData = await namesResponse.json();
+      const names: string[] = namesData.status === 'success' && Array.isArray(namesData.data)
+        ? namesData.data
+        : [];
+
+      // Metadata is best-effort enrichment — a failure should not empty the catalogue
+      let metadata: Record<string, { type?: string; help?: string; unit?: string }[]> = {};
+      if (metadataResponse.ok) {
+        const metadataData = await metadataResponse.json();
+        if (metadataData.status === 'success' && metadataData.data) {
+          metadata = metadataData.data;
+        }
+      }
+
+      let metrics: TelemetryMetric[] = names.map((name) => {
+        const meta = metadata[name]?.[0];
+        return {
+          name,
+          description: meta?.help || undefined,
+          type: meta?.type || 'unknown',
+          unit: meta?.unit || undefined,
+          source: TelemetryDataSource.PROMETHEUS,
+          connectionId: filter?.connectionId,
+        };
+      });
+
+      if (filter?.type) {
+        const type = filter.type.toLowerCase();
+        metrics = metrics.filter((metric) => metric.type.toLowerCase() === type);
+      }
+
+      if (filter?.search) {
+        const search = filter.search.toLowerCase();
+        metrics = metrics.filter(
+          (metric) =>
+            metric.name.toLowerCase().includes(search) ||
+            (metric.description || '').toLowerCase().includes(search)
+        );
+      }
+
+      return metrics;
+    } catch (error) {
+      logger.error('Error listing Prometheus metrics', { error, filter });
+      return [];
+    }
   }
 
   /**
@@ -581,20 +655,62 @@ export class TelemetryQueryService implements Reactory.Service.IReactoryService 
 
   // Helper methods
 
+  /**
+   * TelemetryAggregation -> PromQL aggregation operator. Quantile-style
+   * aggregations (MEDIAN/P95/P99) need a parameter — `quantile(0.95, expr)` —
+   * the enum value lowercased is NOT a valid PromQL function for those.
+   */
+  private static readonly PROMQL_AGGREGATIONS: Record<TelemetryAggregation, { fn: string; param?: number }> = {
+    [TelemetryAggregation.AVG]: { fn: 'avg' },
+    [TelemetryAggregation.SUM]: { fn: 'sum' },
+    [TelemetryAggregation.MIN]: { fn: 'min' },
+    [TelemetryAggregation.MAX]: { fn: 'max' },
+    [TelemetryAggregation.COUNT]: { fn: 'count' },
+    [TelemetryAggregation.MEDIAN]: { fn: 'quantile', param: 0.5 },
+    [TelemetryAggregation.P95]: { fn: 'quantile', param: 0.95 },
+    [TelemetryAggregation.P99]: { fn: 'quantile', param: 0.99 },
+    [TelemetryAggregation.STDDEV]: { fn: 'stddev' },
+  };
+
   private buildPrometheusQuery(input: TelemetryQueryInput, params: Record<string, any>): string {
     let query = input.query;
-    
-    // Apply grouping
-    if (input.groupBy && input.groupBy.length > 0) {
-      const groupByClause = input.groupBy.join(',');
-      
-      if (input.aggregation) {
-        const aggFunc = input.aggregation.toLowerCase();
-        query = `${aggFunc} by (${groupByClause}) (${query})`;
+
+    if (input.aggregation) {
+      const aggregation = TelemetryQueryService.PROMQL_AGGREGATIONS[input.aggregation];
+      if (!aggregation) {
+        throw new Error(`Unsupported aggregation: ${input.aggregation}`);
       }
+      const byClause = input.groupBy && input.groupBy.length > 0
+        ? ` by (${input.groupBy.join(',')})`
+        : '';
+      const args = aggregation.param !== undefined ? `${aggregation.param}, ${query}` : query;
+      query = `${aggregation.fn}${byClause} (${args})`;
     }
-    
+
     return query;
+  }
+
+  /**
+   * Apply limit/offset pagination to the series list. totalSeries keeps the
+   * pre-pagination count so clients can page.
+   */
+  private applyPagination(result: TelemetryQueryResult, input: TelemetryQueryInput): TelemetryQueryResult {
+    const { limit, offset } = input;
+    if (limit === undefined && offset === undefined) return result;
+
+    const start = offset && offset > 0 ? offset : 0;
+    const end = limit && limit > 0 ? start + limit : undefined;
+    const page = result.series.slice(start, end);
+
+    return {
+      ...result,
+      series: page,
+      totalDataPoints: page.reduce((sum, s) => sum + s.data.length, 0),
+      metadata: {
+        ...(result.metadata || {}),
+        pagination: { offset: start, limit: limit ?? null, returnedSeries: page.length },
+      },
+    };
   }
 
   private calculateStep(startMs: number, endMs: number): number {
@@ -627,6 +743,7 @@ export class TelemetryQueryService implements Reactory.Service.IReactoryService 
     
     return {
       query: input.query,
+      connectionId: input.connectionId,
       source: TelemetryDataSource.PROMETHEUS,
       series,
       totalSeries: series.length,
