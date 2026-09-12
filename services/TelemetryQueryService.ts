@@ -1047,6 +1047,11 @@ export class TelemetryQueryService implements Reactory.Service.IReactoryService 
 
   // Helper methods
 
+  /** Public accessor for the resolved Loki base URL (used by the stream service). */
+  getLokiBaseUrl(connectionId?: string): string {
+    return this.getLokiUrl(connectionId);
+  }
+
   private getLokiUrl(connectionId?: string): string {
     const settings = this.getConnectionSettings<LokiConnectionSettings>(connectionId, TelemetryDataSource.LOGS);
     if (!settings) {

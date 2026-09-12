@@ -6,8 +6,9 @@
 
 import Reactory from '@reactorynet/reactory-core';
 import { roles } from '@reactory/server-core/authentication/decorators';
-import { resolver, query } from '@reactory/server-core/models/graphql/decorators/resolver';
+import { resolver, query, mutation } from '@reactory/server-core/models/graphql/decorators/resolver';
 import { TelemetryQueryService } from '../../services/TelemetryQueryService';
+import { TelemetryStreamService, TelemetryStreamSession } from '../../services/TelemetryStreamService';
 import type {
   TelemetryQueryInput,
   TelemetryMetricsFilter,
@@ -302,6 +303,44 @@ class TelemetryQueryResolvers {
       context.log('Error listing trace services', { error }, 'error');
       throw error;
     }
+  }
+
+  /**
+   * Open an SSE live-tail session for a LogQL stream query. Authentication
+   * happens HERE — the returned opaque token authorizes the /telemetry/stream
+   * attach, which bypasses client auth.
+   */
+  @roles(['USER', 'ADMIN'], 'args.context')
+  @mutation('openTelemetryLogTailSession')
+  async openTelemetryLogTailSession(
+    obj: any,
+    params: { input: TelemetryLogQueryInput; intervalMs?: number },
+    context: Reactory.Server.IReactoryContext
+  ): Promise<Omit<TelemetryStreamSession, 'expiry'> & { expiry: string }> {
+    const service = context.getService<TelemetryStreamService>('reactory.TelemetryStreamService@1.0.0');
+    if (!service) throw new Error('TelemetryStreamService not available');
+    try {
+      const session = await service.openLogTailSession(params.input, params.intervalMs);
+      return { ...session, expiry: session.expiry.toISOString() };
+    } catch (error) {
+      context.log('Error opening telemetry log tail session', { error, input: params.input }, 'error');
+      throw error;
+    }
+  }
+
+  /**
+   * Close a live-tail session
+   */
+  @roles(['USER', 'ADMIN'], 'args.context')
+  @mutation('closeTelemetryStreamSession')
+  async closeTelemetryStreamSession(
+    obj: any,
+    params: { sessionId: string },
+    context: Reactory.Server.IReactoryContext
+  ): Promise<boolean> {
+    const service = context.getService<TelemetryStreamService>('reactory.TelemetryStreamService@1.0.0');
+    if (!service) throw new Error('TelemetryStreamService not available');
+    return service.closeSession(params.sessionId);
   }
 }
 

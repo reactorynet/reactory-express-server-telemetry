@@ -135,6 +135,39 @@ input TelemetryTraceSearchInput {
 }
 
 """
+An SSE live-tail session. Connect an EventSource to `endpoint` with
+`?token=<token>` — events: `opened`, `log_entries` (TelemetryLogStream[]
+payload), `stream_error`, `close`.
+"""
+type TelemetryStreamSession {
+  sessionId: String!
+  """
+  Absolute SSE URL: {SSE_URI_ROOT|API_URI_ROOT}/telemetry/stream/{sessionId}
+  """
+  endpoint: String!
+  """
+  Opaque bearer token; pass as ?token= on the EventSource URL
+  """
+  token: String!
+  expiry: String!
+}
+
+extend type Mutation {
+  """
+  Open an SSE live-tail session for a LogQL stream query. The session polls
+  Loki incrementally server-side and pushes new entries as `log_entries`
+  events. Sessions expire after 1h and are evicted 60s after the last
+  subscriber detaches.
+  """
+  openTelemetryLogTailSession(input: TelemetryLogQueryInput!, intervalMs: Int): TelemetryStreamSession!
+
+  """
+  Close a live-tail session (also happens automatically on expiry/eviction)
+  """
+  closeTelemetryStreamSession(sessionId: String!): Boolean
+}
+
+"""
 A dashboard known to a live Grafana instance (import source)
 """
 type TelemetryGrafanaDashboardRef {

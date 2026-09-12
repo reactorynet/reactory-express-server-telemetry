@@ -2,6 +2,7 @@ import middleware from "./middleware";
 import graph from "./graphql";
 import routes from "./routes";
 import TelemetryQueryService from "./services/TelemetryQueryService";
+import TelemetryStreamService from "./services/TelemetryStreamService";
 
 // Export telemetry class and types
 export { 
@@ -40,6 +41,15 @@ const ReactoryTelemetryModule: Reactory.Server.IReactoryModule = {
       version: '1.0.0',
       description: 'Service for querying telemetry data from various sources',
       service: (props, context) => { return new TelemetryQueryService(props, context); },
+      serviceType: 'data'
+    },
+    {
+      id: 'reactory.TelemetryStreamService@1.0.0',
+      name: 'TelemetryStreamService',
+      nameSpace: 'reactory',
+      version: '1.0.0',
+      description: 'SSE live-tail sessions for telemetry log streams (File-SSE pattern)',
+      service: (props, context) => { return new TelemetryStreamService(props, context); },
       serviceType: 'data'
     }
   ],
