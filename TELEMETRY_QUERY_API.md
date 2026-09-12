@@ -481,25 +481,63 @@ All telemetry queries require authentication. Users must have one of the followi
 - `USER`: Can query telemetry data
 - `ADMIN`: Full access to all telemetry features
 
+## Extended API (2026-09) — logs, traces, labels, Grafana, streaming
+
+Beyond the four original queries, the module now exposes (SDL in
+`graphql/schema/TelemetryLogsTraces.graphql`):
+
+```graphql
+extend type Query {
+  # Logs (Loki) — raw log lines; metric LogQL also works via queryTelemetry(source: LOGS)
+  queryTelemetryLogs(input: TelemetryLogQueryInput!): TelemetryLogQueryResult!
+
+  # Traces (Jaeger Query API; queryPort -> REACTORY_JAEGER_QUERY_PORT -> 16686)
+  searchTelemetryTraces(input: TelemetryTraceSearchInput!): [TelemetryTraceSummary!]!
+  getTelemetryTrace(traceId: String!, connectionId: String): TelemetryTrace!
+  listTelemetryTraceServices(connectionId: String): [String!]!
+
+  # Label values (Prometheus + Loki) — filter suggestions and dashboard variables
+  listTelemetryLabelValues(source: TelemetryDataSource!, label: String!, match: String,
+                           connectionId: String, timeRange: TelemetryTimeRangeInput): [String!]!
+
+  # Grafana dashboard import (ADMIN/DEVELOPER; reactory.grafana.connection partner setting)
+  listTelemetryGrafanaDashboards(connectionId: String): [TelemetryGrafanaDashboardRef!]!
+  getTelemetryGrafanaDashboard(uid: String!, connectionId: String): Any!
+}
+
+extend type Mutation {
+  # SSE live tail (File-SSE pattern): authenticated mutation mints an opaque-token
+  # session; EventSource attaches on GET /telemetry/stream/{sessionId}?token=...
+  openTelemetryLogTailSession(input: TelemetryLogQueryInput!, intervalMs: Int): TelemetryStreamSession!
+  closeTelemetryStreamSession(sessionId: String!): Boolean
+}
+```
+
+Services: `reactory.TelemetryQueryService@1.0.0` (queries) and
+`reactory.TelemetryStreamService@1.0.0` (SSE live-tail sessions).
+
 ## Limitations & Future Enhancements
 
 ### Current Limitations
 
-- OTEL query support is under development
-- Log query support is under development
-- Database query support is under development
-- Limited to 1000 data points per series (configurable)
+- OTEL *metric* query support is under development (traces are served via Jaeger; use PROMETHEUS for metrics)
+- Database query support is under development (persisted metrics are available via `CoreGetStatistics` in reactory-core)
+- Limited to 1000 data points per series (server widens the step — downsampled, not truncated)
+- SSE live-tail sessions are single-process (like the core File SSE manager) — multi-worker deployments need Redis fan-out
 
-### Planned Features
+### Feature Status
 
-- [ ] OTEL Collector integration
-- [ ] Loki log aggregation support
-- [ ] Advanced filtering and transformations
-- [ ] Real-time streaming queries
-- [ ] Custom metric calculations
+- [x] Loki log aggregation support — `queryTelemetryLogs` + metric LogQL through `queryTelemetry(source: LOGS)`
+- [x] Jaeger trace search and span retrieval
+- [x] Metric catalogue (`listTelemetryMetrics`) and label values (`listTelemetryLabelValues`)
+- [x] Aggregations mapped to valid PromQL (MEDIAN/P95/P99 → `quantile(φ, …)`)
+- [x] `limit`/`offset` series pagination; `connectionId` on results
+- [x] Real-time streaming — SSE live tail for logs (`openTelemetryLogTailSession`)
+- [x] Grafana dashboard listing/pull for client-side import
+- [x] Saved dashboards — persisted client-side as Reactory form definitions (`ReactoryFormSave`)
+- [ ] OTEL Collector metric integration
 - [ ] Alert threshold queries
-- [ ] Data export functionality
-- [ ] Query templates and saved queries
+- [ ] Data export functionality (client exports CSV from panel series today)
 
 ## Error Handling
 
