@@ -136,6 +136,19 @@ input TelemetryTraceSearchInput {
 
 extend type Query {
   """
+  List the values of one label — Prometheus /api/v1/label/{label}/values or
+  Loki /loki/api/v1/label/{label}/values. Powers label filter suggestions and
+  Grafana-style dashboard variables. `match` narrows to a series selector.
+  """
+  listTelemetryLabelValues(
+    source: TelemetryDataSource!
+    label: String!
+    match: String
+    connectionId: String
+    timeRange: TelemetryTimeRangeInput
+  ): [String!]!
+
+  """
   Query log lines from Loki (LogQL streams)
   """
   queryTelemetryLogs(input: TelemetryLogQueryInput!): TelemetryLogQueryResult!

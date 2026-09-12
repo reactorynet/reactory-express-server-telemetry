@@ -843,6 +843,56 @@ export class TelemetryQueryService implements Reactory.Service.IReactoryService 
     return sources;
   }
 
+  /**
+   * List the values of one label from Prometheus or Loki. Powers label filter
+   * suggestions and dashboard variables (S4).
+   */
+  async listLabelValues(input: {
+    source: TelemetryDataSource;
+    label: string;
+    match?: string;
+    connectionId?: string;
+    timeRange?: TelemetryTimeRange;
+  }): Promise<string[]> {
+    const { startMs, endMs } = this.parseTimeRange(input.timeRange);
+    const label = encodeURIComponent(input.label);
+
+    let url: URL;
+    switch (input.source) {
+      case TelemetryDataSource.PROMETHEUS: {
+        const settings = this.getConnectionSettings<PrometheusConnectionSettings>(
+          input.connectionId,
+          TelemetryDataSource.PROMETHEUS
+        );
+        if (!settings) throw new Error('Prometheus connection not configured');
+        url = new URL(`${this.buildConnectionUrl(settings)}/api/v1/label/${label}/values`);
+        url.searchParams.set('start', (startMs / 1000).toString());
+        url.searchParams.set('end', (endMs / 1000).toString());
+        if (input.match) url.searchParams.append('match[]', input.match);
+        break;
+      }
+      case TelemetryDataSource.LOGS: {
+        url = new URL(`${this.getLokiUrl(input.connectionId)}/loki/api/v1/label/${label}/values`);
+        url.searchParams.set('start', `${startMs}000000`); // ns
+        url.searchParams.set('end', `${endMs}000000`);
+        if (input.match) url.searchParams.set('query', input.match);
+        break;
+      }
+      default:
+        logger.warn('listLabelValues is only implemented for PROMETHEUS and LOGS', { input });
+        return [];
+    }
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error(`Label values request failed: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const values = data.status === 'success' && Array.isArray(data.data) ? data.data : [];
+    return values.filter((value: unknown) => typeof value === 'string');
+  }
+
   // ── Traces (Jaeger Query API) ──────────────────────────────────────────────
 
   /**

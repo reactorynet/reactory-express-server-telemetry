@@ -137,6 +137,36 @@ class TelemetryQueryResolvers {
   }
 
   /**
+   * List the values of one label (Prometheus/Loki) for filters and variables
+   */
+  @roles(['USER', 'ADMIN'], 'args.context')
+  @query('listTelemetryLabelValues')
+  async listTelemetryLabelValues(
+    obj: any,
+    params: {
+      source: TelemetryQueryInput['source'];
+      label: string;
+      match?: string;
+      connectionId?: string;
+      timeRange?: { start: string; end: string; timezone?: string };
+    },
+    context: Reactory.Server.IReactoryContext
+  ): Promise<string[]> {
+    const service = getTelemetryQueryService(context);
+
+    if (!service) {
+      throw new Error('TelemetryQueryService not available');
+    }
+
+    try {
+      return await service.listLabelValues(params);
+    } catch (error) {
+      context.log('Error listing telemetry label values', { error, params }, 'error');
+      throw error;
+    }
+  }
+
+  /**
    * Query raw log lines from Loki (LogQL streams)
    */
   @roles(['USER', 'ADMIN'], 'args.context')
