@@ -16,6 +16,6 @@
     "@opentelemetry/metrics": "0.24.0",
     "@opentelemetry/sdk-metrics": "1.30.0",
     "@opentelemetry/sdk-node": "0.57.0",
-    "@opentelemetry/sdk-trace-node": "1.30.0"
+    "@opentelemetry/sdk-trace-node": "2.12.0"
   }
 }
