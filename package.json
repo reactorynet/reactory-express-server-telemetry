@@ -7,15 +7,15 @@
   "author": "W. Weber",
   "license": "MIT",
   "dependencies": {
-    "@opentelemetry/api": "1.9.0",
-    "@opentelemetry/auto-instrumentations-node": "0.55",
+    "@opentelemetry/api": "1.10.0",
+    "@opentelemetry/auto-instrumentations-node": "0.83",
     "@opentelemetry/exporter-jaeger": "1.30.0",
-    "@opentelemetry/exporter-metrics-otlp-proto": "0.57.0",
-    "@opentelemetry/exporter-prometheus": "0.57.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "0.57.0",
+    "@opentelemetry/exporter-metrics-otlp-proto": "0.301.0",
+    "@opentelemetry/exporter-prometheus": "0.301.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "0.301.0",
     "@opentelemetry/metrics": "0.24.0",
     "@opentelemetry/sdk-metrics": "1.30.0",
-    "@opentelemetry/sdk-node": "0.57.0",
+    "@opentelemetry/sdk-node": "0.301.0",
     "@opentelemetry/sdk-trace-node": "1.30.0"
   }
 }
